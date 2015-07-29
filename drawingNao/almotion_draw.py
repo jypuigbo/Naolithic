@@ -4,7 +4,7 @@ import time
 import argparse
 from naoqi import ALProxy, ALModule, ALBroker
 import argparse
-from OSC import OSCServer, OSCClient
+from OSC import OSCServer, OSCClient, OSCMessage
 import sys
 import motion
 import almath
@@ -19,6 +19,8 @@ p2 = [-0.205, -0.314, 0.395, -1.176, -0.099, -1.119]
 p3 = [-0.170, 0.800, 0.426, -1.405, -0.116, -1.544]
 p = [p3]#[p0,p1,p2,p3]
 
+client = 0
+server = 0
 
 # Global variable to store the ReactToTouch module instance
 ReactToTouch = None
@@ -42,6 +44,8 @@ class ReactToTouch(ALModule):
             "onTouched")
         self.tts = ALProxy("ALTextToSpeech")
 
+        self.tts.say("Hi! Can you help me paint?")
+
     def onTouched(self, strVarName, value):
         """ This will be called each time a touch
         is detected.
@@ -51,23 +55,31 @@ class ReactToTouch(ALModule):
         # to avoid repetitions
         memory.unsubscribeToEvent("TouchChanged",
             "ReactToTouch")
-
-        print 'someone touched my head!'
+        global go_to_center
+        global global_time
+        
         touched_bodies = []
         for p in value:
             if p[1]:
-                touched_bodies.append(p[0])
-        global go_to_center
-        global global_time
-        if time.time()-global_time>1.25:
-            go_to_center = True
-            sentences = ["Ouch!", "I'm sorry", "mmm..."]
-            self.tts.say(random.sample(sentences,1)[0])
-
+                if 'ront' in p[0] or 'iddle' in p[0] or 'ear' in p[0] or 'actil' in p[0]:
+                    print 'someone touched my head!'
+        
+                    if time.time()-global_time>1.25:
+                        go_to_center = True
+                        sentences = ["Ouch!", "I'm sorry", "mmm..."]
+                        self.tts.say(random.sample(sentences,1)[0])
         # Subscribe again to the event
         memory.subscribeToEvent("TouchChanged",
             "ReactToTouch",
             "onTouched")
+
+def sendOSC( address='/xy', data=[] ):
+    global client
+    m = OSCMessage()
+    m.setAddress(address)
+    for d in data: m.append(d)
+    client.send(m)
+
 
 def move(addr, tags, data, source):
     global motionProxy,jointNames
@@ -86,8 +98,14 @@ def main(robotIP, PORT = 9559):
         0,
         robotIP,
         PORT)
+
+    meanx = 0.21835
+    meany = 0.035625
+
     global ReactToTouch, go_to_center, global_time
-    
+    global server, client
+    client = OSCClient()
+    client.connect(("192.168.0.5",1234))
 
     global motionProxy, jointNames
     
@@ -97,13 +115,17 @@ def main(robotIP, PORT = 9559):
     motionProxy.setStiffnesses("Body",0)
     motionProxy.setStiffnesses(jointNames,1)
 
-    motionProxy.openHand("LHand")
-    motionProxy.closeHand("LHand")
+    #motionProxy.openHand("LHand")
+    #motionProxy.closeHand("LHand")
     maxSpeedFraction  = 0.3
     for i in range(1):
         motionProxy.angleInterpolationWithSpeed(jointNames, p[i], maxSpeedFraction)
-        time.sleep(1.0)
+        time.sleep(1.0)    
 
+    minx = -999
+    maxx = 999
+    miny = -999
+    maxy = 999
     # Copy from inverse kinematics
     effector   = "LArm"
     space      = motion.FRAME_ROBOT
@@ -113,6 +135,7 @@ def main(robotIP, PORT = 9559):
     # Since we are in relative, the current position is zero
     currentPos = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     center = currentPos
+
     # Define the changes relative to the current position
     dx         =  0.03      # translation axis X (meters)
     dy         =  -0.04     # translation axis Y (meters)
@@ -129,54 +152,45 @@ def main(robotIP, PORT = 9559):
     motionProxy.positionInterpolation(effector, space, path,
                                       axisMask, times, isAbsolute)
     dz=0.00
+
+    currentPos = motionProxy.getPosition(effector, space, True)
+    offx = 0.034
+    offy = 0.02
+    xy=[1345+103-(currentPos[0]+offx)*400/(0.07), (currentPos[1]+offy)*400/(0.07)+11-87-45]
+    #print xy
+
     input('Press 1 to begin: ')
-    k=1.5
-    L=0.12
+    k=2.5
+    L=0.5
     n=10
     speed = 0.15
     #Initialize listener
     ReactToTouch = ReactToTouch("ReactToTouch")
 
     center = motionProxy.getPosition(effector, space, True)
+    print "center: " + str(center[0]) + ", " + str(center[1])
+    
     try:
       while 1:#for i in range(n):
-        speed = 0.15
-        # False learning
-        if random.random()<0.1:
-            k=max(0.9,k-0.15)
 
-        # Generate next target x,y
-        x = k*random.random()*L-L/2 + center[0]
-        y = k*random.random()*L-L/2 + center[1]
-        # Get current Position & define target position
-        currentPos = motionProxy.getPosition(effector, space, True)
-        targetPos = currentPos
-        targetPos[0] = x
-        targetPos[1] = y
-        targetPos[2] = center[2]
-        print 'new target'
-        print targetPos
-        # Move to position, being able to interrupt
-        motionProxy.setPosition(effector, space, targetPos, speed, axisMask)
-        
-        now = time.time()
-        go_to_center = False
-        while time.time()-now < times[0] and not go_to_center:
-            time.sleep(0.1)
         if go_to_center:
-            if random.random()<0.9:
+            if random.random()<0.95:
                 k=max(0.9,k-0.15)
             speed = 0.4
             go_to_center = False
-            print 'going to center!'
-             # Get current Position & define target position
-            currentPos = motionProxy.getPosition(effector, space, True)
-            targetPos = currentPos
+            #print 'going to center!'
+            # Get current Position & define target position
+            if random.random()<0.8:
+                currentPos = motionProxy.getPosition(effector, space, True)
+                maxx = min(maxx,abs(currentPos[0]-meanx))
+                maxy = min(maxy,abs(currentPos[1]-meany))
+                
+            #targetPos = currentPos
             targetPos[0] = center[0]
             targetPos[1] = center[1]
             targetPos[2] = center[2]
-            print 'new target'
-            print targetPos
+            #print 'new target'
+            #print targetPos
             # Move to position, being able to interrupt
             motionProxy.setPosition(effector, space, targetPos, speed, axisMask)
             #Try it twice, because it doesn't seem to get there
@@ -189,9 +203,39 @@ def main(robotIP, PORT = 9559):
             motionProxy.positionInterpolation(effector, space, path,
                                       axisMask, [0.51], isAbsolute)
             print "sleeping 2 seconds"'''
-            time.sleep(2.)
-            print "slept.."
+            
             global_time = time.time()
+        else:
+            speed = 0.18
+            # False learning
+            if random.random()<0.15:
+                k=max(0.85,k-0.15)
+
+            # Generate next target x,y
+            x = k*random.random()*L-L/2 + center[0]
+            y = k*random.random()*L-L/2 + center[1]
+            # Get current Position & define target position
+            #currentPos = motionProxy.getPosition(effector, space, True)
+            #targetPos = currentPos
+            
+            targetPos[0] = x#min(max(x,meanx-maxx),meanx+maxx)
+            targetPos[1] = y#min(max(y,meany-maxy),meany+maxy)
+            targetPos[2] = center[2]
+            #print 'new target'
+            #print targetPos
+            # Move to position, being able to interrupt
+            motionProxy.setPosition(effector, space, targetPos, speed, axisMask)
+        now = time.time()
+        go_to_center = False
+        while time.time()-now < times[0] and not go_to_center:
+            #time.sleep(0.1)
+            currentPos = motionProxy.getPosition(effector, space, True)
+            offx = 0.034
+            offy = 0.04
+            xy=[1345+97-(currentPos[0]+offx)*400/(0.07), (currentPos[1]+offy)*400/(0.07)+107-87-45]
+            #print xy
+            sendOSC('/xy',xy)
+            time.sleep(0.01)
 
         print 'out of the loop'
         """else:
@@ -202,7 +246,7 @@ def main(robotIP, PORT = 9559):
       print 'Done!'
 
     
-    
+      
 
       server = OSCServer( ("" , 2222) )
       server.addMsgHandler("/move", move)
