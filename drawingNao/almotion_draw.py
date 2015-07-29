@@ -19,6 +19,48 @@ p3 = [-0.170, 0.800, 0.426, -1.405, -0.116, -1.544]
 p = [p3]#[p0,p1,p2,p3]
 
 
+# Global variable to store the ReactToTouch module instance
+ReactToTouch = None
+memory = None
+go_to_center = False
+class ReactToTouch(ALModule):
+    """ A simple module able to react
+        to touch events.
+    """
+    def __init__(self, name):
+        ALModule.__init__(self, name)
+        # No need for IP and port here because
+        # we have our Python broker connected to NAOqi broker
+
+        # Subscribe to TouchChanged event:
+        global memory
+        memory = ALProxy("ALMemory")
+        memory.subscribeToEvent("TouchChanged",
+            "ReactToTouch",
+            "onTouched")
+
+    def onTouched(self, strVarName, value):
+        """ This will be called each time a touch
+        is detected.
+
+        """
+        # Unsubscribe to the event when talking,
+        # to avoid repetitions
+        memory.unsubscribeToEvent("TouchChanged",
+            "ReactToTouch")
+
+        touched_bodies = []
+        for p in value:
+            if p[1]:
+                touched_bodies.append(p[0])
+        global go_to_center
+        go_to_center = True
+
+        # Subscribe again to the event
+        memory.subscribeToEvent("TouchChanged",
+            "ReactToTouch",
+            "onTouched")
+
 def move(addr, tags, data, source):
     global motionProxy,jointNames
 
