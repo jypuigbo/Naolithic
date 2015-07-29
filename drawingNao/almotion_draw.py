@@ -28,8 +28,11 @@ def move(addr, tags, data, source):
     #y = data[1]
     motionProxy.angleInterpolationWithSpeed(jointNames, p[x], maxSpeedFraction)
 
+
+
 def main(robotIP, PORT = 9559):
     global motionProxy, jointNames
+    
     motionProxy = ALProxy("ALMotion", robotIP, PORT)
     postureProxy = ALProxy("ALRobotPosture", robotIP, PORT)
 
@@ -55,7 +58,7 @@ def main(robotIP, PORT = 9559):
     # Define the changes relative to the current position
     dx         =  0.03      # translation axis X (meters)
     dy         =  -0.04     # translation axis Y (meters)
-    dz         =  0.00      # translation axis Z (meters)
+    dz         =  0.02      # translation axis Z (meters)
     dwx        =  0.00      # rotation axis X (radians)
     dwy        =  0.00      # rotation axis Y (radians)
     dwz        =  0.00      # rotation axis Z (radians)
@@ -67,14 +70,15 @@ def main(robotIP, PORT = 9559):
 
     motionProxy.positionInterpolation(effector, space, path,
                                       axisMask, times, isAbsolute)
-    
+    sz=0.00
     n = input('# of trials?')
     k=1.6
+    L=10
     for i in range(n):
         if random.random()<0.3:
             k=max(1,k-0.15)
-        dx = k*random.random()*0.05-0.025 + center[0]
-        dy = k*random.random()*0.05-0.025 + center[1]
+        dx = k*random.random()*L-L/2 + center[0]
+        dy = k*random.random()*L-L/2 + center[1]
         
         targetPos  = [dx, dy, dz, dwx, dwy, dwz]
         path       = [targetPos]
